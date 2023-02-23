@@ -70,7 +70,6 @@ function App() {
     });
   }, []);
 
-
   const onDeleteText = useCallback((idx) => {
     if (
       window.confirm(
@@ -190,6 +189,8 @@ function App() {
                   },
                 };
                 const { data } = await API.api.insertexamkorea(params);
+                alert("업로드를 완료했습니다. 작업창을 초기화합니다.");
+                setMeta([]);
                 console.log(data);
               }
             } catch (e) {
@@ -231,7 +232,15 @@ function App() {
             {
               problems: [
                 {
-                  problem_array: [],
+                  problem_array: [
+                    {
+                      text: "",
+                      type: "text",
+                      align: "flex-start",
+                      title: "",
+                      border: false,
+                    },
+                  ],
                   s1: "",
                   s2: "",
                   s3: "",
@@ -477,7 +486,15 @@ const ProblemWidthText = memo(
                   [
                     ...problems,
                     {
-                      problem_array: [],
+                      problem_array: [
+                        {
+                          text: "",
+                          type: "text",
+                          align: "flex-start",
+                          title: "",
+                          border: false,
+                        },
+                      ],
                       s1: "",
                       s2: "",
                       s3: "",
