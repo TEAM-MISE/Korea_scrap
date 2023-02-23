@@ -1,4 +1,12 @@
-import React, { useState, memo, useRef, forwardRef, useMemo } from "react";
+import React, {
+  useState,
+  memo,
+  useRef,
+  forwardRef,
+  useMemo,
+  useCallback,
+  useImperativeHandle,
+} from "react";
 import {
   Editor,
   EditorState,
@@ -24,7 +32,8 @@ function App() {
   const [testName, setTestName] = useState("0");
   const [canUpload, setCanUpload] = useState(false);
   const [API] = useMemo(useAPI, []);
-  const scrollRef = useRef([]);
+  const scrollRef = useRef({});
+  // const editorStateRef = useRef([]);
 
   const textParser = (text, inlineStyleRanges) => {
     let result = text || "";
@@ -52,6 +61,29 @@ function App() {
     });
     return result;
   };
+
+  const setProblems = useCallback((problems, idx) => {
+    setMeta((prev) => {
+      const temp = _.cloneDeep(prev);
+      temp[idx].problems = problems;
+      return temp;
+    });
+  }, []);
+
+
+  const onDeleteText = useCallback((idx) => {
+    if (
+      window.confirm(
+        "정말 지문을 삭제할까요?\n 지문에 포함된 문제도 함께 삭제됩니다."
+      )
+    ) {
+      setMeta((prev) => {
+        const temp = _.cloneDeep(prev);
+        temp.splice(idx, 1);
+        return temp;
+      });
+    }
+  }, []);
 
   return (
     <div
@@ -130,8 +162,13 @@ function App() {
                   alert("모든 문제의 선택지와 정답을 입력해주세요.");
                   return;
                 }
-
-                const result = meta.map((v) => {
+                const revisedMeta = meta.map((v, idx) => {
+                  return {
+                    ...v,
+                    editorState: scrollRef.current[idx].getEditorState(),
+                  };
+                });
+                const result = revisedMeta.map((v) => {
                   return {
                     text: [
                       {
@@ -168,36 +205,19 @@ function App() {
       {meta.map((v, idx) => {
         return (
           <ProblemWidthText
+            key={idx}
             textIndex={idx}
-            ref={scrollRef}
-            editorState={v.editorState}
-            setEditorState={(editorState) => {
-              const temp = _.cloneDeep(meta);
-              temp[idx].editorState = editorState;
-              setMeta(temp);
+            ref={(v) => {
+              scrollRef.current[idx] = v;
             }}
             problems={v.problems}
-            setProblems={(problems) => {
-              const temp = _.cloneDeep(meta);
-              temp[idx].problems = problems;
-              setMeta(temp);
-            }}
+            setProblems={setProblems}
             startNumber={
               meta.slice(0, idx).reduce((acc, cur) => {
                 return acc + cur.problems.length;
               }, 0) + 1
             }
-            onDeleteText={() => {
-              if (
-                window.confirm(
-                  "정말 지문을 삭제할까요?\n 지문에 포함된 문제도 함께 삭제됩니다."
-                )
-              ) {
-                const temp = _.cloneDeep(meta);
-                temp.splice(idx, 1);
-                setMeta(temp);
-              }
-            }}
+            onDeleteText={onDeleteText}
           />
         );
       })}
@@ -218,12 +238,11 @@ function App() {
                   s4: "",
                   s5: "",
                   type: "객관식",
-                  answer : "",
-                  helpAns : "",
-
+                  answer: "",
+                  helpAns: "",
                 },
               ],
-              editorState: EditorState.createEmpty(),
+              // editorState: EditorState.createEmpty(),
             },
           ]);
         }}
@@ -262,9 +281,7 @@ function App() {
                         cursor: "pointer",
                       }}
                       onMouseDown={() => {
-                        scrollRef?.current?.[idx]?.[index]?.scrollIntoView({
-                          behavior: "smooth",
-                        });
+                        scrollRef?.current?.[idx]?.scrollToIndex(index);
                         // console.log(scrollRef.current);
                       }}
                     >
@@ -285,18 +302,19 @@ export default App;
 
 const ProblemWidthText = memo(
   forwardRef(
-    (
-      {
-        editorState,
-        setEditorState,
-        problems,
-        setProblems,
-        startNumber,
-        textIndex,
-        onDeleteText,
-      },
-      ref
-    ) => {
+    ({ problems, setProblems, startNumber, textIndex, onDeleteText }, ref) => {
+      const [editorState, setEditorState] = useState(EditorState.createEmpty());
+      const scrollRef = useRef([]);
+      useImperativeHandle(ref, () => ({
+        getEditorState: () => {
+          return editorState;
+        },
+        scrollToIndex: (index) => {
+          scrollRef.current?.[index].scrollIntoView({
+            behavior: "smooth",
+          });
+        },
+      }));
       return (
         <div
           style={{
@@ -309,12 +327,29 @@ const ProblemWidthText = memo(
             paddingBottom: 50,
             position: "relative",
           }}
+          ref={(refer) => {
+            if (refer) {
+              console.log("refer", refer);
+              console.log("ref", ref);
+              if (!ref.current) {
+                ref.current = {};
+              }
+              if (!ref.current?.editorState) {
+                ref.current.editorState = {};
+              }
+              ref.current.editorState[textIndex] = refer;
+            }
+          }}
         >
           <TextEditor
             width={500}
             editorState={editorState}
-            setEditorState={setEditorState}
-            onDeleteText={onDeleteText}
+            setEditorState={(e) => {
+              setEditorState(e, textIndex);
+            }}
+            onDeleteText={() => {
+              onDeleteText(textIndex);
+            }}
           />
           <div
             style={{
@@ -340,17 +375,14 @@ const ProblemWidthText = memo(
               return (
                 <ProblemEditor
                   ref={(refer) => {
-                    if (!ref.current[textIndex]) {
-                      ref.current[textIndex] = [];
-                    }
-                    ref.current[textIndex][i] = refer;
+                    scrollRef.current[i] = refer;
                   }}
                   number={startNumber + i}
                   problem_array={v.problem_array}
                   setProblem_array={(problem_array) => {
                     const temp = _.cloneDeep(problems);
                     temp[i].problem_array = problem_array(v.problem_array);
-                    setProblems(temp);
+                    setProblems(temp, textIndex);
                   }}
                   s1={v.s1}
                   s2={v.s2}
@@ -361,44 +393,44 @@ const ProblemWidthText = memo(
                   setType={(type) => {
                     const temp = _.cloneDeep(problems);
                     temp[i].type = type;
-                    setProblems(temp);
+                    setProblems(temp, textIndex);
                   }}
                   setS1={(s1) => {
                     const temp = _.cloneDeep(problems);
                     temp[i].s1 = s1;
-                    setProblems(temp);
+                    setProblems(temp, textIndex);
                   }}
                   setS2={(s2) => {
                     const temp = _.cloneDeep(problems);
                     temp[i].s2 = s2;
-                    setProblems(temp);
+                    setProblems(temp, textIndex);
                   }}
                   setS3={(s3) => {
                     const temp = _.cloneDeep(problems);
                     temp[i].s3 = s3;
-                    setProblems(temp);
+                    setProblems(temp, textIndex);
                   }}
                   setS4={(s4) => {
                     const temp = _.cloneDeep(problems);
                     temp[i].s4 = s4;
-                    setProblems(temp);
+                    setProblems(temp, textIndex);
                   }}
                   setS5={(s5) => {
                     const temp = _.cloneDeep(problems);
                     temp[i].s5 = s5;
-                    setProblems(temp);
+                    setProblems(temp, textIndex);
                   }}
                   answer={v.answer}
                   setAnswer={(answer) => {
                     const temp = _.cloneDeep(problems);
                     temp[i].answer = answer;
-                    setProblems(temp);
+                    setProblems(temp, textIndex);
                   }}
                   helpAns={v.helpAns}
                   setHelpAns={(helpAns) => {
                     const temp = _.cloneDeep(problems);
                     temp[i].helpAns = helpAns;
-                    setProblems(temp);
+                    setProblems(temp, textIndex);
                   }}
                   key={i}
                   setSelect={(select) => {
@@ -408,13 +440,13 @@ const ProblemWidthText = memo(
                     temp[i].s3 = select.s3;
                     temp[i].s4 = select.s4;
                     temp[i].s5 = select.s5;
-                    setProblems(temp);
+                    setProblems(temp, textIndex);
                   }}
                   onDeleteProblem={() => {
                     if (window.confirm("정말 삭제하시겠습니까?")) {
                       const temp = _.cloneDeep(problems);
                       temp.splice(i, 1);
-                      setProblems(temp);
+                      setProblems(temp, textIndex);
                     }
                   }}
                   onMoveUp={() => {
@@ -423,7 +455,7 @@ const ProblemWidthText = memo(
                     const temp2 = temp[i];
                     temp[i] = temp[i - 1];
                     temp[i - 1] = temp2;
-                    setProblems(temp);
+                    setProblems(temp, textIndex);
                   }}
                   onMoveDown={() => {
                     if (i === problems.length - 1) return;
@@ -431,7 +463,7 @@ const ProblemWidthText = memo(
                     const temp2 = temp[i];
                     temp[i] = temp[i + 1];
                     temp[i + 1] = temp2;
-                    setProblems(temp);
+                    setProblems(temp, textIndex);
                   }}
                 />
               );
@@ -441,20 +473,23 @@ const ProblemWidthText = memo(
               variant="contained"
               color="primary"
               onClick={() => {
-                setProblems([
-                  ...problems,
-                  {
-                    problem_array: [],
-                    s1: "",
-                    s2: "",
-                    s3: "",
-                    s4: "",
-                    s5: "",
-                    answer: "",
-                    helpAns: "",
-                    type: "객관식",
-                  },
-                ]);
+                setProblems(
+                  [
+                    ...problems,
+                    {
+                      problem_array: [],
+                      s1: "",
+                      s2: "",
+                      s3: "",
+                      s4: "",
+                      s5: "",
+                      answer: "",
+                      helpAns: "",
+                      type: "객관식",
+                    },
+                  ],
+                  textIndex
+                );
               }}
             >
               새로운 문제
@@ -463,14 +498,20 @@ const ProblemWidthText = memo(
         </div>
       );
     }
-  )
-  // (prevState, nextProps) => {
-  //   for (const index in nextProps) {
-  //     if (nextProps[index] !== prevState[index]) {
-  //       console.log(index, prevState[index], "-->", nextProps[index]);
-  //     }
-  //   }
-  // }
+  ),
+  (prevState, nextProps) => {
+    // // prolbme, editorState 비교
+    // for (const index in nextProps) {
+    //   if (nextProps[index] !== prevState[index]) {
+    //     console.log(index, prevState[index], "-->", nextProps[index]);
+    //   }
+    // }
+    return false;
+    return (
+      _.isEqual(prevState.problems, nextProps.problems) &&
+      _.isEqual(prevState.editorState, nextProps.editorState)
+    );
+  }
 );
 const TextEditor = ({ width, editorState, setEditorState, onDeleteText }) => {
   const insertText = () => {
