@@ -146,11 +146,12 @@ function App() {
                     cur.problems.reduce((acc2, cur2) => {
                       return (
                         acc2 &&
-                        cur2.s1 !== "" &&
-                        cur2.s2 !== "" &&
-                        cur2.s3 !== "" &&
-                        cur2.s4 !== "" &&
-                        cur2.s5 !== "" &&
+                        ((cur2.s1 !== "" &&
+                          cur2.s2 !== "" &&
+                          cur2.s3 !== "" &&
+                          cur2.s4 !== "" &&
+                          cur2.s5 !== "") ||
+                          cur.type === "서술형") &&
                         cur2.answer !== ""
                       );
                     }, true)
