@@ -151,7 +151,7 @@ function App() {
                           cur2.s3 !== "" &&
                           cur2.s4 !== "" &&
                           cur2.s5 !== "") ||
-                          cur.type === "서술형") &&
+                          cur2.type === "서술형") &&
                         cur2.answer !== ""
                       );
                     }, true)
